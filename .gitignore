@@ -209,3 +209,6 @@ __marimo__/
 rbfe_results.tar.gz
 src/results/
 src/tyk2_campaign*/
+# pixi environments
+.pixi/*
+!.pixi/config.toml
