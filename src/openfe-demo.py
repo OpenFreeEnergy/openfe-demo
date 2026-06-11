@@ -76,8 +76,55 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
- 
+    target protein: BACE-1
     """)
+    return
+
+
+@app.cell
+def _(mo):
+    import py3Dmol
+    v = py3Dmol.view('7DCZ',height=400,width="100%",style='cartoon')
+    mo.iframe(v.write_html(fullpage=True),height=420)
+    return
+
+
+app._unparsable_cell(
+    r"""
+    Ωimport gufe, konnektor
+    from rdkit import Chem
+    from gufe import SmallMoleculeComponent
+    """,
+    name="_"
+)
+
+
+@app.cell
+def _(gufe):
+    lomap_network = gufe.LigandNetwork.from_json("inputs/lomap_network.json")
+    return (lomap_network,)
+
+
+@app.cell
+def _(lomap_network):
+    from konnektor.visualization import draw_ligand_network
+
+    draw_ligand_network(lomap_network)
+    return
+
+
+@app.cell
+def _(Chem, SmallMoleculeComponent):
+    ligands_sdf = Chem.SDMolSupplier('inputs/ligands.sdf', removeHs=False)
+    from rdkit.Chem import AllChem
+
+    ligand_mols = [SmallMoleculeComponent(sdf) for sdf in ligands_sdf]
+
+    return
+
+
+@app.cell
+def _():
     return
 
 
