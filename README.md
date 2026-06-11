@@ -12,8 +12,8 @@ Installing from conda-forge is simplest, and you can use `micromamba` (recommend
 
 ```bash
 
-micromamba create -n openfe openfe=1.8.1
-micromamba activate openfe
+micromamba create -f env.yaml
+micromamba activate openfe-demo
 
 ```
 
