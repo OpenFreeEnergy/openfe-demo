@@ -1,4 +1,4 @@
-# OpenFE Demo: SBGrid 10-Feb-2026
+# OpenFE Demo: OMSF Stack Tour 2026-06-24
 
 You can find the demo notebook in `src/openfe_demo.ipynb`.
 
