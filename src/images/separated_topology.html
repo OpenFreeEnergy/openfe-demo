@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Separated Topology</title>
+<style>
+  body{margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#f8f8f8;font-family:sans-serif;}
+  .card{background:#fff;border:1.5px dashed #ccc;border-radius:14px;padding:20px 24px;display:flex;flex-direction:column;align-items:center;}
+  h2{margin:0 0 12px;font-size:18px;font-weight:700;color:#222;}
+  canvas{display:block;border-radius:8px;background:#fff;}
+  .lam{font-size:13px;color:#888;margin-top:8px;}
+  .controls{margin-top:10px;display:flex;gap:12px;align-items:center;}
+  button{padding:5px 18px;border-radius:7px;border:1px solid #ccc;background:#f0f0f0;cursor:pointer;font-size:13px;}
+  button:hover{background:#e0e0e0;}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:12px;font-size:12px;color:#555;}
+  .li{display:flex;align-items:center;gap:5px;}
+  .ld{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Separated topology</h2>
+  <canvas id="cv" width="320" height="340"></canvas>
+  <div class="lam" id="lam">λ = 0.00</div>
+  <div class="controls">
+    <button id="btnReplay">↺ Replay</button>
+    <span id="timeLabel" style="font-size:12px;color:#888">0.0 s</span>
+  </div>
+  <div class="legend">
+    <div class="li"><div class="ld" style="background:#D85A30;border:1.5px solid #a04020"></div>Ligand A</div>
+    <div class="li"><div class="ld" style="background:#378ADD;border:1.5px solid #2060aa"></div>Ligand B</div>
+    <div class="li"><div class="ld" style="background:#f4b8b8;border:1.5px solid #d08080"></div>Water</div>
+    <div class="li"><div class="ld" style="background:#b8d8f0;border-radius:3px;width:18px;height:10px;"></div>Protein</div>
+    <div class="li"><div class="ld" style="background:#888;border:1px solid #555;"></div>Protein Boresch atom</div>
+    <div class="li"><div class="ld" style="background:rgba(100,100,100,0.15);border:1.5px solid #555;"></div>Ligand Boresch atom</div>
+    <div class="li"><svg width="22" height="9"><line x1="0" y1="4" x2="22" y2="4" stroke="#222" stroke-width="2" stroke-dasharray="4,3"/></svg>Boresch bond (r)</div>
+  </div>
+</div>
+<script>
+const MIN_A=0.08;
+function smoothStep(t){return(1-Math.cos(Math.PI*t))/2;}
+const DUR=12000;
+function getLambda(t){
+  if(t<0.15) return 0;
+  if(t>0.85) return 1;
+  return smoothStep((t-0.15)/0.70);
+}
+function fadeOut(lam){return MIN_A+(1-MIN_A)*(1-lam);}
+function fadeIn(lam){return MIN_A+(1-MIN_A)*lam;}
+
+const C_CARBON='#777675',C_CARBON_S='#444',C_H='#ffffff',C_HS='#aaaaaa';
+const C_A='#D85A30',C_AS='#a04020',C_B='#378ADD',C_BS='#2060aa';
+const C_WATER='#f4b8b8',C_WATERS='#d08080',C_BOND='#555555';
+const SA=-Math.PI/2;
+const H_LEN=15,H_R=4.5;
+
+const W=320,H=340;
+const sc=W/185;
+const PCX=Math.round(W*132/185),PCY=Math.round(H*103/205);
+const pocketR=Math.round(58*sc);
+const pocketCX=PCX-Math.round(68*sc)+Math.round(10*sc);
+const pocketCY=PCY;
+const LX=pocketCX+Math.round(8*sc),LY=pocketCY;
+const RING_R=Math.round(24*sc);
+const SUBST_R=Math.round(7*sc),SUBST_DY=Math.round(17*H/205);
+const W2=Math.round(68*sc),H2=Math.round(90*H/205),cornerR=Math.round(22*sc);
+const L=PCX-W2,R=PCX+W2,T=PCY-H2,B=PCY+H2;
+
+const dxFromCircle=L-pocketCX;
+const dyAtL=Math.sqrt(pocketR*pocketR-dxFromCircle*dxFromCircle);
+const gapTop=pocketCY-dyAtL;
+const gapBot=pocketCY+dyAtL;
+const arcAngleTop=Math.atan2(gapTop-pocketCY,L-pocketCX);
+const arcAngleBot=Math.atan2(gapBot-pocketCY,L-pocketCX);
+
+const WATERS=[[-46*sc,-52*sc],[-52*sc,-16*sc],[-52*sc,20*sc],[-46*sc,56*sc]];
+
+function ringPos(cx,cy,r){
+  return Array.from({length:6},(_,i)=>({
+    x:cx+r*Math.cos(SA+i*Math.PI*2/6),
+    y:cy+r*Math.sin(SA+i*Math.PI*2/6),
+  }));
+}
+
+/**
+ * Boresch atoms:
+ * - Ligand: atoms 1,2,3 (right side of ring, closest to protein)
+ * - Protein: 3 consecutive atoms placed DEEPER into the protein body
+ *   (further from the pocket rim, clearly inside the blue area)
+ *   so the dashed bond is long enough to be clearly visible
+ */
+function getBoreschAtoms(ligAtoms){
+  const L1=ligAtoms[1],L2=ligAtoms[2],L3=ligAtoms[3];
+
+  // Place protein atoms further inside the protein body
+  // Use angles closer to 0 but with shorter radius so they're
+  // deeper in from the rim
+  // Protein atoms sit ON the pocket arc wall, clustered together
+  // near the ligand atoms 1,2,3 (right side of ring)
+  // Place them at angles close to 0 on the arc (rightmost point of pocket)
+  // but offset vertically so they form a visible chain P1-P2-P3
+  const wallX = pocketCX + pocketR * 0.92; // just inside the arc rim
+  const wallY = pocketCY;
+  const spacing = 14 * (pocketR / 58); // vertical spacing between protein atoms
+  const P1={x:wallX - spacing*0.3, y:wallY - spacing};
+  const P2={x:wallX,               y:wallY};
+  const P3={x:wallX - spacing*0.3, y:wallY + spacing};
+  return {L1,L2,L3,P1,P2,P3};
+}
+
+// Deep variant: protein atoms sit on the flat blue protein body to the RIGHT of the pocket
+function getBoreschAtomsDeep(ligAtoms){
+  const L1=ligAtoms[1],L2=ligAtoms[2],L3=ligAtoms[3];
+  // Protein body: right half of canvas, centred around (PCX, PCY)
+  // Place 3 atoms in a small triangle/chain well inside the blue block
+  const spacing = 18 * (pocketR/58);
+  const cx = pocketCX + pocketR * 1.35; // well into the protein block rightward
+  const cy = pocketCY;
+  const P1={x:cx - spacing*0.3, y:cy - spacing};
+  const P2={x:cx,               y:cy};
+  const P3={x:cx - spacing*0.3, y:cy + spacing};
+  return {L1,L2,L3,P1,P2,P3};
+}
+
+
+function drawProtein(ctx){
+  ctx.save();
+  ctx.fillStyle='#b8d8f0';
+  ctx.beginPath();
+  ctx.moveTo(L,gapTop);
+  ctx.bezierCurveTo(L,T+cornerR,L,T,L+cornerR*0.5,T);
+  ctx.lineTo(R-cornerR,T);ctx.quadraticCurveTo(R,T,R,T+cornerR);
+  ctx.lineTo(R,B-cornerR);ctx.quadraticCurveTo(R,B,R-cornerR,B);
+  ctx.lineTo(L+cornerR*0.5,B);
+  ctx.bezierCurveTo(L,B,L,B-cornerR,L,gapBot);
+  ctx.arc(pocketCX,pocketCY,pocketR,arcAngleBot,arcAngleTop,true);
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#78a8c8';ctx.lineWidth=1.5*sc;
+  ctx.beginPath();
+  ctx.moveTo(L,gapTop);
+  ctx.bezierCurveTo(L,T+cornerR,L,T,L+cornerR*0.5,T);
+  ctx.lineTo(R-cornerR,T);ctx.quadraticCurveTo(R,T,R,T+cornerR);
+  ctx.lineTo(R,B-cornerR);ctx.quadraticCurveTo(R,B,R-cornerR,B);
+  ctx.lineTo(L+cornerR*0.5,B);
+  ctx.bezierCurveTo(L,B,L,B-cornerR,L,gapBot);ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(pocketCX,pocketCY,pocketR,arcAngleTop,arcAngleBot,false);ctx.stroke();
+  ctx.restore();
+}
+
+function drawBond(ctx,x1,y1,x2,y2,alpha=1,color=C_BOND){
+  ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;
+  ctx.lineWidth=2.2*sc;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore();
+}
+function drawAtom(ctx,x,y,r,fill,stroke,alpha=1){
+  ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=fill;ctx.strokeStyle=stroke;
+  ctx.lineWidth=1.8*sc;
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();
+}
+function drawWater(ctx,x,y){
+  const rO=7*sc,bondLen=15*sc;
+  const angles=[-Math.PI/2-0.45,-Math.PI/2+0.45];
+  const Hpos=angles.map(a=>({x:x+bondLen*Math.cos(a),y:y+bondLen*Math.sin(a)}));
+  Hpos.forEach(h=>drawBond(ctx,x,y,h.x,h.y,0.8,'#aaaaaa'));
+  drawAtom(ctx,x,y,rO,C_WATER,C_WATERS,1);
+  Hpos.forEach(h=>drawAtom(ctx,h.x,h.y,H_R*sc,C_H,C_HS,0.95));
+}
+
+// Draw ring WITHOUT any hydrogen atoms
+function drawRingNoH(ctx,cx,cy,r,atomColor,atomStroke,alpha=1){
+  const atoms=ringPos(cx,cy,r);
+  [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]].forEach(([a,b])=>
+    drawBond(ctx,atoms[a].x,atoms[a].y,atoms[b].x,atoms[b].y,alpha));
+  atoms.forEach(at=>drawAtom(ctx,at.x,at.y,7.5*sc,atomColor,atomStroke,alpha));
+  return atoms;
+}
+
+// Draw ring WITH hydrogen atoms, optionally skipping some indices
+function drawRing(ctx,cx,cy,r,atomColor,atomStroke,alpha=1,skipH=[]){
+  const atoms=ringPos(cx,cy,r);
+  [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]].forEach(([a,b])=>
+    drawBond(ctx,atoms[a].x,atoms[a].y,atoms[b].x,atoms[b].y,alpha));
+  atoms.forEach((at,i)=>{
+    if(skipH.includes(i)) return;
+    const angle=SA+i*Math.PI*2/6;
+    const hx=at.x+H_LEN*sc*Math.cos(angle),hy=at.y+H_LEN*sc*Math.sin(angle);
+    drawBond(ctx,at.x,at.y,hx,hy,alpha*0.8);
+    drawAtom(ctx,hx,hy,H_R*sc,C_H,C_HS,alpha*0.9);
+  });
+  atoms.forEach(at=>drawAtom(ctx,at.x,at.y,7.5*sc,atomColor,atomStroke,alpha));
+  return atoms;
+}
+function drawSubst(ctx,from,dx,dy,color,stroke,alpha=1){
+  const to={x:from.x+dx,y:from.y+dy};
+  // Bond drawn first so it sits behind both atoms
+  drawBond(ctx,from.x,from.y,to.x,to.y,alpha,C_BOND);
+  drawAtom(ctx,to.x,to.y,SUBST_R,color,stroke,alpha);
+}
+
+// Angle arc — no fill, just stroke, no color (black/dark)
+function drawAngleArc(ctx,vertex,p1,p2,radius,alpha=1){
+  const a1=Math.atan2(p1.y-vertex.y,p1.x-vertex.x);
+  const a2=Math.atan2(p2.y-vertex.y,p2.x-vertex.x);
+  // Ensure we sweep the smaller angle
+  let start=a1,end=a2;
+  ctx.save();ctx.globalAlpha=alpha;
+  ctx.strokeStyle='#333';ctx.lineWidth=1.0*sc;
+  ctx.beginPath();
+  ctx.arc(vertex.x,vertex.y,radius,start,end,false);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLabel(ctx,x,y,text,alpha=1,size=11){
+  ctx.save();ctx.globalAlpha=alpha;
+  ctx.font=`italic ${Math.round(size*sc)}px Georgia,serif`;
+  ctx.fillStyle='#222';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(text,x,y);
+  ctx.restore();
+}
+
+function drawBoresch(ctx,ligAtoms,alpha){
+  const {L1,L2,L3,P1,P2,P3}=getBoreschAtoms(ligAtoms);
+  const arcR=10*sc;
+
+  // Protein chain bonds
+  drawBond(ctx,P1.x,P1.y,P2.x,P2.y,alpha,'#555');
+  drawBond(ctx,P2.x,P2.y,P3.x,P3.y,alpha,'#555');
+
+  // Intermolecular dashed bond P3--L1
+  ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle='#222';
+  ctx.lineWidth=1.8*sc;ctx.setLineDash([5*sc,3*sc]);ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(P3.x,P3.y);ctx.lineTo(L1.x,L1.y);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+
+  // Angle arcs (no fill, thin stroke)
+  drawAngleArc(ctx,P3,P2,L1,arcR,alpha);
+  drawAngleArc(ctx,L1,P3,L2,arcR,alpha);
+  // Dihedral arcs (slightly smaller)
+  drawAngleArc(ctx,P2,P1,P3,arcR*0.7,alpha);
+  drawAngleArc(ctx,L2,L1,L3,arcR*0.7,alpha);
+
+  // Protein atom dots (filled blue-ish to match protein colour)
+  drawAtom(ctx,P1.x,P1.y,5*sc,'#b8d8f0','#78a8c8',alpha);
+  drawAtom(ctx,P2.x,P2.y,5*sc,'#b8d8f0','#78a8c8',alpha);
+  drawAtom(ctx,P3.x,P3.y,5*sc,'#b8d8f0','#78a8c8',alpha);
+
+  // Labels
+  const rMidX=(P3.x+L1.x)/2,rMidY=(P3.y+L1.y)/2-9*sc;
+  drawLabel(ctx,rMidX,rMidY,'r',alpha);
+  // θ at P3
+  drawLabel(ctx,P3.x-14*sc,P3.y+8*sc,'θ',alpha);
+  // θ at L1
+  drawLabel(ctx,L1.x+12*sc,L1.y+10*sc,'θ',alpha);
+  // φ at P2
+  drawLabel(ctx,P2.x-12*sc,P2.y-10*sc,'φ',alpha);
+  // φ at L2
+  drawLabel(ctx,L2.x+12*sc,L2.y-10*sc,'φ',alpha);
+}
+
+function drawBoreschDeep(ctx,ligAtoms,alpha){
+  const {L1,L2,L3,P1,P2,P3}=getBoreschAtomsDeep(ligAtoms);
+  const arcR=10*sc;
+  const protR=6*sc; // protein Boresch atom radius
+  const ligHighR=10*sc; // grey ring highlight radius around ligand atoms
+
+  // ── Grey ring highlight around ligand Boresch atoms (drawn BEFORE ring so it shows) ──
+  [L1,L2,L3].forEach(at=>{
+    ctx.save();ctx.globalAlpha=alpha*0.85;
+    ctx.strokeStyle='#555';ctx.lineWidth=1.5*sc;ctx.fillStyle='rgba(100,100,100,0.15)';
+    ctx.beginPath();ctx.arc(at.x,at.y,ligHighR,0,Math.PI*2);
+    ctx.fill();ctx.stroke();
+    ctx.restore();
+  });
+
+  // ── Protein chain bonds ──
+  drawBond(ctx,P1.x,P1.y,P2.x,P2.y,alpha,'#555');
+  drawBond(ctx,P2.x,P2.y,P3.x,P3.y,alpha,'#555');
+
+  // ── Dashed intermolecular bond P3--L1 ──
+  ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle='#222';
+  ctx.lineWidth=1.8*sc;ctx.setLineDash([5*sc,3*sc]);ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(P3.x,P3.y);ctx.lineTo(L1.x,L1.y);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+
+  // ── Protein Boresch atoms (grey, inside protein body) ──
+  drawAtom(ctx,P1.x,P1.y,protR,'#888','#555',alpha);
+  drawAtom(ctx,P2.x,P2.y,protR,'#888','#555',alpha);
+  drawAtom(ctx,P3.x,P3.y,protR,'#888','#555',alpha);
+
+  // ── r label only ──
+  const rMidX=(P3.x+L1.x)/2,rMidY=(P3.y+L1.y)/2-9*sc;
+  drawLabel(ctx,rMidX,rMidY,'r',alpha);
+}
+
+
+function ringLeftHEdge(cx,cy,r){
+  let minX=Infinity;
+  for(let i=0;i<6;i++){
+    const angle=SA+i*Math.PI*2/6;
+    const ax=cx+r*Math.cos(angle);
+    const hx=ax+H_LEN*Math.cos(angle);
+    minX=Math.min(minX,hx-H_R);
+  }
+  return minX;
+}
+
+function septopPositions(){
+  const shX=Math.round(6*sc),shY=Math.round(5*sc);
+  const r=RING_R*0.88;
+  const waterRightEdge=Math.max(...WATERS.map(([dx])=>LX+dx+7*sc));
+  let redHEdge=ringLeftHEdge(LX-shX,LY-shY,r);
+  const gap=18;
+  let extraShift=0;
+  if(redHEdge<waterRightEdge+gap) extraShift=waterRightEdge+gap-redHEdge;
+  // Blue ligand: shift slightly left compared to red to keep it away from protein wall
+  return {
+    axA:LX-shX+extraShift, ayA:LY-shY,
+    axB:LX+shX+extraShift-Math.round(6*sc), ayB:LY+shY,
+    r
+  };
+}
+
+
+const SEP=septopPositions();
+const ctx=document.getElementById('cv').getContext('2d');
+function draw(lam){
+  ctx.clearRect(0,0,W,H);
+  drawProtein(ctx);
+  WATERS.forEach(([dx,dy])=>drawWater(ctx,LX+dx,LY+dy));
+  const atomsA=ringPos(SEP.axA,SEP.ayA,SEP.r);
+  const atomsB=ringPos(SEP.axB,SEP.ayB,SEP.r);
+  drawBoreschDeep(ctx,atomsA,fadeOut(lam));
+  drawBoreschDeep(ctx,atomsB,fadeIn(lam));
+  drawRing(ctx,SEP.axA,SEP.ayA,SEP.r,C_A,C_AS,fadeOut(lam));
+  drawSubst(ctx,atomsA[0],0,-SUBST_DY,C_A,C_AS,fadeOut(lam));
+  drawRing(ctx,SEP.axB,SEP.ayB,SEP.r,C_B,C_BS,fadeIn(lam));
+  drawSubst(ctx,atomsB[0],0,-SUBST_DY,C_B,C_BS,fadeIn(lam));
+}
+
+
+const DUR2=5000;
+let startTime=null,running=true;
+function animate(ts){
+  if(!startTime) startTime=ts;
+  const elapsed=ts-startTime;
+  const t=Math.min(elapsed/DUR2,1.0);
+  const lam=getLambda(t);
+  document.getElementById('lam').textContent='λ = '+lam.toFixed(2);
+  document.getElementById('timeLabel').textContent=(elapsed/1000).toFixed(1)+' s';
+  draw(lam);
+  if(t<1.0&&running) requestAnimationFrame(animate);
+}
+document.getElementById('btnReplay').addEventListener('click',()=>{startTime=null;running=true;requestAnimationFrame(animate);});
+requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>
