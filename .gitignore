@@ -211,3 +211,4 @@ src/bace_rbfe/**
 src/experimental_binding_data.json
 src/rbfe_results*
 src/results
+src/bace_results*
