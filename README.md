@@ -1,4 +1,4 @@
-# OpenFE Demo: SBGrid 10-Feb-2026
+# OpenFE Demo: OMSF Stack Tour 2026-06-24
 
 You can find the demo notebook in `src/openfe_demo.ipynb`.
 
@@ -12,8 +12,8 @@ Installing from conda-forge is simplest, and you can use `micromamba` (recommend
 
 ```bash
 
-micromamba create -n openfe openfe=1.8.1
-micromamba activate openfe
+micromamba create -f env.yaml
+micromamba activate openfe-demo
 
 ```
 
