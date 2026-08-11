@@ -4,11 +4,21 @@ You can find the demo notebook in `src/openfe_demo.ipynb`.
 
 See the [openfe git repo](https://github.com/OpenFreeEnergy/openfe) and [documentation](https://docs.openfree.energy/en/latest/) to learn more!
 
-## Installing openfe locally
+## Running the demo locally
 
+### using `pixi` 
+
+In this directory, run:
+
+```bash
+pixi run demo
+```
+
+
+### using `micromamba`
 To run the notebook locally, you'll need to install **openfe**:
 
-Installing from conda-forge is simplest, and you can use `micromamba` (recommended), `mamba` or `conda`:
+You can instead use `micromamba` (recommended), `mamba` or `conda`:
 
 ```bash
 
