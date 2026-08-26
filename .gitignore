@@ -212,3 +212,6 @@ src/experimental_binding_data.json
 src/rbfe_results*
 src/results
 src/bace_results*
+# pixi environments
+.pixi/*
+!.pixi/config.toml

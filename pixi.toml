@@ -1,0 +1,13 @@
+[workspace]
+channels = ["conda-forge"]
+name = "openfe-demo"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+demo= "jupyter notebook src/openfe_demo.ipynb"
+
+[dependencies]
+python = "3.13.*"
+openfe = "1.12.*"
+notebook = "*"
