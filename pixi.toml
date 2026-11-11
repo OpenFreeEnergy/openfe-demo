@@ -11,3 +11,6 @@ demo= "jupyter notebook src/openfe_demo.ipynb"
 python = "3.13.*"
 openfe = "1.13.*"
 notebook = "*"
+
+[pypi-dependencies]
+alchemy-viz = ">=0.1.5, <0.2"
